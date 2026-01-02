@@ -1,0 +1,93 @@
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.venv/
+ENV/
+env/
+
+# Public ignore
+public/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# =========================
+# Environment variables / secrets
+# =========================
+.env
+.env.*
+*.env
+
+# API keys / credentials
+secrets.json
+credentials.json
+*.pem
+*.key
+
+# =========================
+# Streamlit
+# =========================
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# =========================
+# LangChain / RAG artifacts
+# =========================
+# Vector databases
+chroma/
+chromadb/
+faiss_index/
+pinecone/
+weaviate/
+qdrant/
+
+# Embedding caches
+embeddings/
+cache/
+.cache/
+
+# LangChain traces / logs
+langchain_debug.log
+langchain_logs/
+
+# =========================
+# Model files
+# =========================
+*.bin
+*.pt
+*.pth
+*.onnx
+models/
+
+
+# =========================
+# OS / editor junk
+# =========================
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Temporary files
+# =========================
+tmp/
+temp/
