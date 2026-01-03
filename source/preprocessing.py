@@ -1,24 +1,22 @@
-# extract_chunks.py
-
 import os
 from git import Repo
 import mimetypes
 from tree_sitter_language_pack import get_parser
 
-
+# Ensure text is in UTF-8 bytes
 def to_utf8_bytes(text):
     if isinstance(text, bytes):
         return text
     return text.encode("utf-8", errors="replace")
 
-
+# Read file content from git repository
 def read_file(repo, path):
     try:
         return repo.git.show(f'HEAD:{path}')
     except Exception:
         return None
 
-
+# Recursive AST Walk to extract functions and classes
 def walk(node, file, code):
     chunk = []
 
@@ -63,7 +61,7 @@ def walk(node, file, code):
 
     return chunk
 
-
+# Extract code chunks from repository habe to add an additional argumet for the repo link, to clone it locally and delete after use
 def extract_chunks(
     language: str = "python"
 ):
