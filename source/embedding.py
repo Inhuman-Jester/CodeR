@@ -66,7 +66,7 @@ logging.info("Uploading documents to Pinecone...")
 documents = []
 
 for chunk in chunks:
-    start_line, end_line = chunk["metadata"]["line_of_code"]
+    print(chunk["code"])
 
     documents.append(
         Document(
@@ -76,8 +76,8 @@ for chunk in chunks:
                 "type": str(chunk["metadata"]["type"]),
                 "language": str(chunk["metadata"]["language"]),
                 "file": str(chunk["metadata"]["file"]),
-                "start_line": int(start_line),
-                "end_line": int(end_line),
+                "start_line": int(chunk["metadata"]["start_line"]),
+                "end_line": int(chunk["metadata"]["end_line"]),
             }
         )
     )

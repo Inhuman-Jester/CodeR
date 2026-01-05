@@ -1,0 +1,84 @@
+{
+  "app.py::is_followup_question": [
+    "user_query.lower",
+    "user_query.lower().split",
+    "cosine_similarity",
+    "any",
+    "embeddings_model.encode",
+    "utils/helper.py::get_last_qa_context",
+    "np.array",
+    "logging.info"
+  ],
+  "source/indexing_pipeline.py::ensure_index": [
+    "ServerlessSpec",
+    "pc.create_index",
+    "pc.list_indexes",
+    "time.sleep",
+    "logging.info"
+  ],
+  "source/indexing_pipeline.py::load_and_split_documents": [
+    "PyPDFLoader",
+    "loader.load",
+    "text_splitter.split_documents",
+    "len",
+    "logging.info",
+    "RecursiveCharacterTextSplitter"
+  ],
+  "source/indexing_pipeline.py::embed_documents": [
+    "e[:5].sum",
+    "st_model.encode",
+    "float",
+    "logging.info"
+  ],
+  "source/indexing_pipeline.py::upsert_embeddings": [
+    "index.upsert",
+    "pc.Index",
+    "zip",
+    "len",
+    "enumerate",
+    "range",
+    "split.metadata.get",
+    "logging.info"
+  ],
+  "source/indexing_pipeline.py::run_indexing_pipeline": [
+    "indexing_chain.invoke",
+    "source/indexing_pipeline.py::ensure_index",
+    "logging.info"
+  ],
+  "source/retrieval_and_generation_pipeline.py::retrieve_chat_history": [
+    "doc.get",
+    "st_model.encode([expanded_query], convert_to_numpy=True)[0].tolist",
+    "len",
+    "index.query",
+    "st_model.encode",
+    "source/retrieval_and_generation_pipeline.py::formatContext",
+    "logging.info"
+  ],
+  "source/retrieval_and_generation_pipeline.py::retrieve_relevant_docs": [
+    "index.query",
+    "st_model.encode",
+    "source/retrieval_and_generation_pipeline.py::formatContext",
+    "st_model.encode([question + \" \" + chat_history_context], convert_to_numpy=True)[0].tolist",
+    "logging.info"
+  ],
+  "source/retrieval_and_generation_pipeline.py::formatContext": [
+    "\"\\n\".join"
+  ],
+  "source/retrieval_and_generation_pipeline.py::outputParser": [
+    "logging.info"
+  ],
+  "utils/helper.py::get_last_qa_context": [
+    "len",
+    "prev_message.get",
+    "last_message.get"
+  ],
+  "utils/helper.py::expand_followup_query": [
+    "expanded_query.strip"
+  ],
+  "utils/helper.py::store_chat_history": [
+    "index.upsert",
+    "hash",
+    "embeddings_model.encode",
+    "logging.info"
+  ]
+}
