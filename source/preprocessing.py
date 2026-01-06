@@ -37,7 +37,7 @@ def extract_called_function(call_node):
     return None
 
 # Recursive AST Walk to extract functions and classes
-def walk(node, file, code, function_index, call_graph, current_function=None):
+def walk(node, file, code, function_index, call_graph, file_struct, current_function=None):
     space = []
 
     # Function Definition
@@ -61,6 +61,7 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
                 "end_line" : node.end_point[0]+1,
             }
         })
+        file_struct["functions"].append(fq_name)
 
     # Class Definition
     elif node.type == "class_definition":
@@ -78,6 +79,7 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
                 "end_line" : node.end_point[0]+1,
             }
         })
+        file_struct["classes"].append(fq_name)
 
     # Function Call
     elif node.type == "call" and current_function:
@@ -94,7 +96,8 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
                 code,
                 function_index,
                 call_graph,
-                current_function
+                file_struct,
+                current_function,
             )
         )
 
@@ -138,20 +141,29 @@ def extract_spaces(language: str = "python"):
     spaces = {}
     function_index = {}
     raw_call_graph = {}
+    dir_structure = {}
 
     # Parse each file
     for f in code_files:
         code_bytes = to_utf8_bytes(f["content"])
         tree = parser.parse(code_bytes)
         root = tree.root_node
+        
+        file_struct = {
+            "functions": [],
+            "classes": []
+        }
 
         spaces[f["path"]] = walk(
             root,
             f,
             code_bytes,
             function_index,
-                raw_call_graph
-            )
+            raw_call_graph,
+            file_struct
+        )
+
+        dir_structure[f["path"]] = file_struct
         print(f"Parsed file: {f['path']}")
         
     # Resolve Call Graph
@@ -178,7 +190,7 @@ def extract_spaces(language: str = "python"):
         )
 
     delete_after_exit("public")
-    print(spaces)
+    print(dir_structure)
     return spaces
 
 if __name__ == "__main__":

@@ -8,10 +8,10 @@ from langchain_pinecone import PineconeVectorStore
 from uuid import uuid4
 from langchain_core.documents import Document
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
-from source.preprocessing import extract_chunks
+from source.preprocessing import extract_spaces
 
 # Get Code Chunks
-chunks = extract_chunks(
+chunks = extract_spaces(
     language="python"
 )
 
