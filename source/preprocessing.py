@@ -38,7 +38,7 @@ def extract_called_function(call_node):
 
 # Recursive AST Walk to extract functions and classes
 def walk(node, file, code, function_index, call_graph, current_function=None):
-    chunk = []
+    space = []
 
     # Function Definition
     if node.type == "function_definition":
@@ -50,7 +50,7 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
 
         current_function = fq_name
 
-        chunk.append({
+        space.append({
             "id": fq_name,
             "code": code[node.start_byte:node.end_byte].decode("utf-8", errors="ignore"),
             "metadata": {
@@ -67,7 +67,7 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
         name = node.child_by_field_name("name").text.decode("utf-8")
         fq_name = f"{file['path']}::{name}"
 
-        chunk.append({
+        space.append({
             "id": fq_name,
             "code": code[node.start_byte:node.end_byte].decode("utf-8", errors="ignore"),
             "metadata": {
@@ -87,7 +87,7 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
 
     # Recurse
     for child in node.children:
-        chunk.extend(
+        space.extend(
             walk(
                 child,
                 file,
@@ -98,11 +98,11 @@ def walk(node, file, code, function_index, call_graph, current_function=None):
             )
         )
 
-    return chunk
+    return space
 
 
 # Extract code chunks from repository habe to add an additional argumet for the repo link, to clone it locally and delete after use
-def extract_chunks(language: str = "python"):
+def extract_spaces(language: str = "python"):
     local_path = "./public"
     repo_url = "https://github.com/Inhuman-Jester/RAG-Project.git"
     Repo.clone_from(repo_url, local_path)
@@ -135,7 +135,7 @@ def extract_chunks(language: str = "python"):
 
     parser = get_parser(language)
 
-    chunks = []
+    spaces = {}
     function_index = {}
     raw_call_graph = {}
 
@@ -145,15 +145,13 @@ def extract_chunks(language: str = "python"):
         tree = parser.parse(code_bytes)
         root = tree.root_node
 
-        chunks.extend(
-            walk(
-                root,
-                f,
-                code_bytes,
-                function_index,
+        spaces[f["path"]] = walk(
+            root,
+            f,
+            code_bytes,
+            function_index,
                 raw_call_graph
             )
-        )
         print(f"Parsed file: {f['path']}")
         
     # Resolve Call Graph
@@ -180,9 +178,9 @@ def extract_chunks(language: str = "python"):
         )
 
     delete_after_exit("public")
-
-    return chunks
+    print(spaces)
+    return spaces
 
 if __name__ == "__main__":
-    chunks = extract_chunks(language="python")
-    print(f"Extracted {len(chunks)} code chunks from the repository.")
+    spaces = extract_spaces(language="python")
+    print(f"Extracted {len(spaces)} code chunks from the repository.")
