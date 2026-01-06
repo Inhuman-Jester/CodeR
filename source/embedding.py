@@ -11,12 +11,11 @@ from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from source.preprocessing import extract_spaces
 
 # Get Code Chunks
-chunks = extract_spaces(
+spaces = extract_spaces(
     language="python"
 )
 
-print(f"Extracted {len(chunks)} code chunks.")
-
+print(f"Extracted {len(spaces)} code chunks.")
 # Environment & Logging
 load_dotenv(".env")
 
@@ -63,29 +62,35 @@ embedding_model = CodeBERTEmbeddings()
 # Vector Ingestion
 logging.info("Uploading documents to Pinecone...")
 
-documents = []
+documents = {}
 
-for chunk in chunks:
-    print(chunk["code"])
-
-    documents.append(
-        Document(
-            page_content=chunk["code"],
-            metadata={
-                "chunk_id": str(chunk["id"]),
-                "type": str(chunk["metadata"]["type"]),
-                "language": str(chunk["metadata"]["language"]),
-                "file": str(chunk["metadata"]["file"]),
-                "start_line": int(chunk["metadata"]["start_line"]),
-                "end_line": int(chunk["metadata"]["end_line"]),
-            }
+for path, elements in spaces.items():
+    document = []
+    for element in elements:
+            document.append(
+            Document(
+                page_content=element["code"],
+                metadata={
+                    "chunk_id": str(element["id"]),
+                    "type": str(element["metadata"]["type"]),
+                    "language": str(element["metadata"]["language"]),
+                    "file": str(element["metadata"]["file"]),
+                    "start_line": int(element["metadata"]["start_line"]),
+                    "end_line": int(element["metadata"]["end_line"]),
+                }
+            )
         )
-    )
+    documents[path] = document
+    
 
 # Create Vector Store and Add Documents
-vector_store = PineconeVectorStore(index=index, embedding=embedding_model)
-uuids = [str(uuid4()) for _ in range(len(documents))]
+for path, docs in documents.items():
+    vectorstore = PineconeVectorStore.from_documents(
+    documents=docs,
+    embedding=CodeBERTEmbeddings(),
+    index_name=INDEX_NAME,
+    namespace=path
+)
 
-vector_store.add_documents(documents=documents, ids=uuids)
 
 logging.info("Ingestion complete.")

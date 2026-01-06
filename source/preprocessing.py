@@ -190,7 +190,7 @@ def extract_spaces(language: str = "python"):
         )
 
     delete_after_exit("public")
-    print(dir_structure)
+    print(spaces)
     return spaces
 
 if __name__ == "__main__":
