@@ -179,6 +179,7 @@ def extract_spaces(language: str = "python"):
                 call_graph[caller].append(callee)  # unresolved / external
     
     json.dump(call_graph, open('database/call_graph.json', 'w'), indent=2)
+    json.dump(dir_structure, open('database/dir_structure.json', 'w'), indent=2)
     
     def delete_after_exit(path):
         subprocess.Popen(
