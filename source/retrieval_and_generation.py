@@ -27,13 +27,13 @@ embedding_model = CodeBERTEmbeddings()
 # LLM Model Setup
 model = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
-    temperature=1.0,
+    temperature=0.5,
     max_tokens=None,
     timeout=None,
     max_retries=2
 )
 
-query = "What does the function storing chat history does and how?"
+query = "What is the flow of data processing in the codebase?"
 
 # Load Directory Structure & Call Graph
 dir_structure = open("database/dir_structure.json", "r").read()
@@ -79,9 +79,15 @@ messages = [
     ("human", query),
 ]
 
+print("Classifying Query...")
 response = model.invoke(messages)
 
-query_type , file_path= json.loads(response.content)
+refined_response = json.loads(response.content)
+
+query_type = refined_response["query_type"]
+file_path = refined_response.get("file_path", None)
+
+print(f"Query Type: {query_type}, File Path: {file_path}")
 
 # Syntactical Query Handler
 def syntactical_query(query, file_path=file_path):
@@ -93,7 +99,51 @@ def syntactical_query(query, file_path=file_path):
         include_metadata=True
     )
 
-    matches = extracted_code["matches"]["metadata"]
+    snippets = []
+
+    matches = extracted_code["matches"]
+    for i, match in enumerate(matches):
+        snippets.append(match['metadata'])
+
+
+    context = """
+    You are a code analysis assistant.
+
+    The incoming query is about the semantics of a specific code file.
+
+    You are provided with :
+    1. The directory structure of the codebase
+    2. The function call graph of the codebase
+    3. A human query
+    4. Relevant code snippets from the specified file
+
+    Your task:
+    - Use the code snippets to explain the behavior and purpose of the relevant parts of the codebase.
+    - Describe how the code works to fulfill the query.
+    - Focus only on the components directly involved.
+
+    Rules:
+    - Be concise and precise.
+    - Do NOT explain unrelated files or functions.
+    - Do NOT speculate beyond the given information.
+    - Do NOT repeat the code snippets verbatim.
+
+    Directory Structure:
+    {dir_structure}
+
+    Call Graph:
+    {call_graph}
+
+    Code Snippets from {file_path}:
+    {snippets}
+    """
+    messages = [
+        ("system", context),
+        ("human", query),
+    ]
+    response = model.invoke(messages)
+    return response.content
+
     
 
 
@@ -134,20 +184,13 @@ def structural_query(query):
     response = model.invoke(messages)
     return response.content
 
-def route_query(query, query_type, file_path):
+def route_query_and_generate(query, query_type, file_path):
+    print("Generating Response...")
     if query_type == "structural":
-        return syntactical_query(query, file_path)
-    elif query_type == "semantic":
         return structural_query(query)
+    elif query_type == "semantic":
+        return syntactical_query(query, file_path)
     else:
-        return None
-# print(syntactical_query(query_type, query))
-# print("Query Type:")
-
-# messages = [
-#     ("human", query+syntactical_query(query)),
-# ]
-# response = model.invoke(messages)
-# print(response.content)
-
-print(syntactical_query(query))
+        return None  
+    
+print(route_query_and_generate(query, query_type, file_path))
