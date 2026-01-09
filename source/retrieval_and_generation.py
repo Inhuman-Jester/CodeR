@@ -4,7 +4,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 from pinecone import Pinecone
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
-import json
+from typing import TypedDict, Optional, List
+# from utils.prompts import query_classification_prompt 
+from langgraph.graph import StateGraph, END, START
 
 load_dotenv(dotenv_path=".env")
 
@@ -33,80 +35,86 @@ model = ChatGoogleGenerativeAI(
     max_retries=2
 )
 
-query = "What is the flow of data processing in the codebase?"
-
 # Load Directory Structure & Call Graph
 dir_structure = open("database/dir_structure.json", "r").read()
 call_graph = open("database/call_graph.json", "r").read()
 
-# prompt for Query Classification
-system_prompt = f"""
-You are an intelligent query analyzer for a codebase question-answering system.
+query = "What is the flow of data processing in the codebase?"
 
-You are provided with:
-1. The directory structure of a codebase
-2. The function call graph of the codebase
-3. A human query about the codebase
+class CodeAgentState(TypedDict):
+    query: str
+    query_type: Optional[str]
+    file_path: Optional[str]
+    snippets: Optional[List[dict]]
+    response: Optional[str]
 
-Your tasks are:
 
-1. First, classify the human query into exactly ONE of the following categories:
-   - "structural": questions about code structure, files, function calls, execution flow, dependencies, or class relationships
-   - "semantic": questions about behavior, purpose, logic, or explanation of code
-   - "invalid": queries that do not relate to the codebase
+def classify_query(state: CodeAgentState):
+    query_classification_prompt = f"""
+    You are an intelligent query analyzer for a codebase question-answering system.
 
-2. After the query is classifie:
-   - Determine which file the query is referring to using the directory structure and call graph .
-   - Return ONLY valid JSON in the following format:
-     {{
-       "query_type": "semantic" | "invalid" | "structural",
-       "file_path": from directory structure (None if invalid or structural)}}
+    You are provided with:
+    1. The directory structure of a codebase
+    2. The function call graph of the codebase
+    3. A human query about the codebase
 
-Rules:
-- Do NOT add explanations.
-- Do NOT include Markdown, code blocks, or extra text.
-- Output must be raw JSON exactly as specified 
+    Your tasks are:
 
-Directory Structure:
-{dir_structure}
+    1. First, classify the human query into exactly ONE of the following categories:
+    - "structural": questions about code structure, files, function calls, execution flow, dependencies, or class relationships
+    - "semantic": questions about behavior, purpose, logic, or explanation of code
+    - "invalid": queries that do not relate to the codebase
 
-Call Graph:
-{call_graph}
-"""
+    2. After the query is classifie:
+    - Determine which file the query is referring to using the directory structure and call graph .
+    - Return ONLY valid JSON in the following format:
+        {{
+        "query_type": "semantic" | "invalid" | "structural",
+        "file_path": from directory structure (None if invalid or structural)}}
 
-messages = [
-    ("system", system_prompt),
-    ("human", query),
-]
+    Rules:
+    - Do NOT add explanations.
+    - Do NOT include Markdown, code blocks, or extra text.
+    - Output must be raw JSON exactly as specified 
 
-print("Classifying Query...")
-response = model.invoke(messages)
+    Directory Structure:
+    {dir_structure}
 
-refined_response = json.loads(response.content)
+    Call Graph:
+    {call_graph}
+    """
+    messages = [
+        ("system", query_classification_prompt),
+        ("human", state["query"]),
+    ]
+    response = model.invoke(messages)
+    result = json.loads(response.content)
 
-query_type = refined_response["query_type"]
-file_path = refined_response.get("file_path", None)
+    return {
+        "query_type": result["query_type"],
+        "file_path": result.get("file_path")
+    }
 
-print(f"Query Type: {query_type}, File Path: {file_path}")
 
-# Syntactical Query Handler
-def syntactical_query(query, file_path=file_path):
-    embedded_query = embedding_model.embed_documents([query])[0].tolist()
-    extracted_code = index.query(
-        namespace=file_path,
+def semantic_retrieval(state: CodeAgentState):
+    embedded_query = embedding_model.embed_documents(
+        [state["query"]]
+    )[0].tolist()
+
+    results = index.query(
+        namespace=state["file_path"],
         vector=embedded_query,
         top_k=3,
         include_metadata=True
     )
 
-    snippets = []
+    snippets = [m["metadata"] for m in results["matches"]]
 
-    matches = extracted_code["matches"]
-    for i, match in enumerate(matches):
-        snippets.append(match['metadata'])
+    return {"snippets": snippets}
 
 
-    context = """
+def semantic_reasoning(state: CodeAgentState):
+    semantic_prompt = f"""
     You are a code analysis assistant.
 
     The incoming query is about the semantics of a specific code file.
@@ -134,22 +142,21 @@ def syntactical_query(query, file_path=file_path):
     Call Graph:
     {call_graph}
 
-    Code Snippets from {file_path}:
-    {snippets}
+    Code Snippets from {state["file_path"]}:
+    {state["snippets"]}
     """
-    messages = [
-        ("system", context),
-        ("human", query),
-    ]
-    response = model.invoke(messages)
-    return response.content
 
+    messages = [
+        ("system", semantic_prompt),
+        ("human", state["query"]),
+    ]
+
+    response = model.invoke(messages)
+    return {"response": response.content}
     
 
-
-# Structural Query Handler
-def structural_query(query):
-    context = f"""
+def structural_reasoning(state: CodeAgentState):
+    structural_prompt = f"""
     You are a structural codebase analysis assistant.
 
     The incoming query is about the structure of the codebase.
@@ -176,21 +183,68 @@ def structural_query(query):
     Call Graph:
     {call_graph}
     """
+
     messages = [
-        ("system", context),
-        ("human", query),
+        ("system", structural_prompt),
+        ("human", state["query"]),
     ]
-
     response = model.invoke(messages)
-    return response.content
+    return {"response": response.content}
 
-def route_query_and_generate(query, query_type, file_path):
-    print("Generating Response...")
-    if query_type == "structural":
-        return structural_query(query)
-    elif query_type == "semantic":
-        return syntactical_query(query, file_path)
-    else:
-        return None  
+
+def invalid_handler(state: CodeAgentState):
+    return {
+        "response": "This query does not relate to the codebase."
+    }
+
+
+# def route_query_and_generate(query, query_type, file_path):
+#     print("Generating Response...")
+#     if query_type == "structural":
+#         return structural_query(query)
+#     elif query_type == "semantic":
+#         return semantic_query(query, file_path)
+#     else:
+#         return None  
     
-print(route_query_and_generate(query, query_type, file_path))
+
+graph = StateGraph(CodeAgentState)
+
+graph.add_node("classify", classify_query)
+graph.add_node("semantic_retrieval", semantic_retrieval)
+graph.add_node("semantic_reasoning", semantic_reasoning)
+graph.add_node("structural_reasoning", structural_reasoning)
+graph.add_node("invalid", invalid_handler)
+
+
+def route(state: CodeAgentState):
+    if state["query_type"] == "semantic":
+        return "semantic_retrieval"
+    elif state["query_type"] == "structural":
+        return "structural_reasoning"
+    else:
+        return "invalid"
+    
+graph.add_edge(START, "classify")
+graph.add_conditional_edges(
+    "classify",
+    route,
+    {
+        "semantic_retrieval": "semantic_retrieval",
+        "structural_reasoning": "structural_reasoning",
+        "invalid": "invalid"
+    }
+)
+graph.add_edge("semantic_retrieval", "semantic_reasoning")
+graph.add_edge("semantic_reasoning", END)
+graph.add_edge("structural_reasoning", END)
+graph.add_edge("invalid", END)
+
+
+app = graph.compile()
+
+result = app.invoke({
+    "query": "What is the flow of data processing in the codebase?"
+})
+
+print(result["response"])

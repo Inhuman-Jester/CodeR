@@ -58,3 +58,4 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
 2. Code search & Discovery (help developers find relevant code quickly)
 3. A beautiful frontend.
 4. Expand to other languages.
+5. Need to add context window
