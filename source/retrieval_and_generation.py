@@ -4,10 +4,10 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 from pinecone import Pinecone
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
-
 from typing import TypedDict, Optional, List
 from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator
 from langgraph.graph import StateGraph, END, START
+from utils.helper import formatContext
 
 load_dotenv(dotenv_path=".env")
 
@@ -48,10 +48,33 @@ class CodeAgentState(TypedDict):
     file_path: Optional[str]
     snippets: Optional[List[dict]]
     response: Optional[str]
+    chat_history_context: Optional[str]
+
+
+def retrieve_chat_history(state: CodeAgentState):
+    query = state["query"]
+    embedded_query = embedding_model.embed_documents(
+        [query]
+    )[0].tolist()
+
+    chat_history_results = index.query(
+        vector=embedded_query,
+        top_k=2,
+        include_metadata=True,
+        namespace="chat_history"
+    )
+
+    if len(chat_history_results['matches']):
+        selected_chat_history_results = [doc for doc in chat_history_results['matches'] if doc.get('score',0) > 0.4]
+    else:
+        selected_chat_history_results = []
+
+    formatted_chat_history_results = formatContext({'matches': selected_chat_history_results})
+    return {"chat_history_context": formatted_chat_history_results}
 
 
 def classify_query(state: CodeAgentState):
-    query_classification_prompt = query_classification_prompt_generator(dir_structure, call_graph)
+    query_classification_prompt = query_classification_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
     
     messages = [
         ("system", query_classification_prompt),
@@ -84,7 +107,7 @@ def semantic_retrieval(state: CodeAgentState):
 
 
 def semantic_reasoning(state: CodeAgentState):
-    semantic_prompt = semantic_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"])
+    semantic_prompt = semantic_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"], state.get("chat_history_context",""))
 
     messages = [
         ("system", semantic_prompt),
@@ -96,7 +119,7 @@ def semantic_reasoning(state: CodeAgentState):
     
 
 def structural_reasoning(state: CodeAgentState):
-    structural_prompt = structural_prompt_generator(dir_structure, call_graph)
+    structural_prompt = structural_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
 
     messages = [
         ("system", structural_prompt),
@@ -111,13 +134,36 @@ def invalid_handler(state: CodeAgentState):
         "response": "This query does not relate to the codebase."
     }
 
+def update_chat_history(state: CodeAgentState):
+    qa_text = f"Q: {state['query']}\nA: {state['response']}"
+
+    embedding = embedding_model.embed_documents([qa_text])[0].tolist()
+
+    index.upsert(
+        vectors=[
+            {
+                "id": str(os.urandom(16).hex()),
+                "values": embedding,
+                "metadata": {
+                    "text": qa_text
+                }
+            }
+        ],
+        namespace="chat_history"
+    )
+
+    return {}
+
+
 graph = StateGraph(CodeAgentState)
 
+graph.add_node("retrieve_chat_history", retrieve_chat_history)
 graph.add_node("classify", classify_query)
 graph.add_node("semantic_retrieval", semantic_retrieval)
 graph.add_node("semantic_reasoning", semantic_reasoning)
 graph.add_node("structural_reasoning", structural_reasoning)
 graph.add_node("invalid", invalid_handler)
+graph.add_node("update_chat_history", update_chat_history)
 
 
 def route(state: CodeAgentState):
@@ -128,7 +174,8 @@ def route(state: CodeAgentState):
     else:
         return "invalid"
     
-graph.add_edge(START, "classify")
+graph.add_edge(START, "retrieve_chat_history")
+graph.add_edge("retrieve_chat_history", "classify")
 graph.add_conditional_edges(
     "classify",
     route,
@@ -139,15 +186,16 @@ graph.add_conditional_edges(
     }
 )
 graph.add_edge("semantic_retrieval", "semantic_reasoning")
-graph.add_edge("semantic_reasoning", END)
-graph.add_edge("structural_reasoning", END)
-graph.add_edge("invalid", END)
+graph.add_edge("semantic_reasoning", "update_chat_history")
+graph.add_edge("structural_reasoning", "update_chat_history")
+graph.add_edge("invalid", "update_chat_history")
+graph.add_edge("update_chat_history", END)
 
 
 app = graph.compile()
 
 result = app.invoke({
-    "query": "What is the flow of data processing in the codebase?"
+    "query": "Can you explain in more detail?"
 })
 
 print(result["response"])

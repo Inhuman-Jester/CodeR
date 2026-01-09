@@ -1,5 +1,5 @@
 
-def query_classification_prompt_generator(dir_structure, call_graph):
+def query_classification_prompt_generator(dir_structure, call_graph, chat_history_context=""):
     return f"""
     You are an intelligent query analyzer for a codebase question-answering system.
 
@@ -7,6 +7,7 @@ def query_classification_prompt_generator(dir_structure, call_graph):
     1. The directory structure of a codebase
     2. The function call graph of the codebase
     3. A human query about the codebase
+    4. Chat history context from previous interactions (if any)
 
     Your tasks are:
 
@@ -32,9 +33,12 @@ def query_classification_prompt_generator(dir_structure, call_graph):
 
     Call Graph:
     {call_graph}
+
+    Chat History Context:
+    {chat_history_context}
     """
 
-def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets):
+def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets, chat_history_context):
     return f"""
     You are a code analysis assistant.
 
@@ -45,6 +49,7 @@ def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets):
     2. The function call graph of the codebase
     3. A human query
     4. Relevant code snippets from the specified file
+    5. Chat history context from previous interactions (if any)
 
     Your task:
     - Use the code snippets to explain the behavior and purpose of the relevant parts of the codebase.
@@ -65,9 +70,12 @@ def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets):
 
     Code Snippets from {file_path}:
     {snippets}
+
+    Chat History Context:
+    {chat_history_context}
     """
 
-def structural_prompt_generator(dir_structure, call_graph):
+def structural_prompt_generator(dir_structure, call_graph, chat_history_context):
     return f"""
     You are a structural codebase analysis assistant.
 
@@ -77,6 +85,7 @@ def structural_prompt_generator(dir_structure, call_graph):
     1. The directory structure of the codebase
     2. The function call graph of the codebase
     3. A human query
+    4. Chat history context from previous interactions (if any)
 
     Your task:
     - Use the directory structure and call graph to explain how the relevant parts of the codebase are connected.
@@ -94,4 +103,7 @@ def structural_prompt_generator(dir_structure, call_graph):
 
     Call Graph:
     {call_graph}
+
+    Chat History Context:
+    {chat_history_context}
     """

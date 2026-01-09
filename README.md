@@ -14,9 +14,13 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
 - The repository is cloned into a public workspace directory for analysis.
 
 2.  **_Codebase Parsing_** :
-    The codebase is parsed using language-specific AST tools to extract: - Function & class definitions (as semantic chunks) - Codebase Structure - Function call graph (caller–callee relationships)
+    The codebase is parsed using language-specific AST tools to extract:
 
-        This step converts raw code into a structured representation.
+    - Function & class definitions (as semantic chunks)
+    - Codebase Structure
+    - Function call graph (caller–callee relationships)
+
+    This step converts raw code into a structured representation.
 
 3.  **_Indexing_** :
     - Each file acts as a namespace in Pinecone.
@@ -34,15 +38,15 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
     ```
 4.  **_Query Classification & Routing_** : An LLM (Gemini) is fed the query and the codebase struct, and it classifies incoming query into:
 
-    - Sytactical queries
+    - Semantic queries
     - Structural queries
     - None / irrelevant
 
-    Also, it returns file\_\_path to which the query is relevant (only if it is syntactical)
+    Also, it returns file\_\_path to which the query is relevant (only if it is semantic)
 
     The query is routed to the appropriate pipeline.
 
-5.  **_Syntactical Query Handling_** :
+5.  **_Semantic Query Handling_** :
 
     - The query is embedded.
     - A vector search is performed over the relevant namespace i.e. the file path.
@@ -52,10 +56,10 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
     - No embeddings involved.
     - Answers are derived from: AST, function call graph & file structure maps
 
-## What more?
+## What more? (yet to implement)
 
 1. An AI based debugger integrated
 2. Code search & Discovery (help developers find relevant code quickly)
 3. A beautiful frontend.
-4. Expand to other languages.
-5. Need to add context window
+4. Expand to other languages. (only python codebase right now)
+5. ~~Need to add context window.~~
