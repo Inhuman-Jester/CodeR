@@ -1,7 +1,5 @@
 import os
-import shutil
 import subprocess
-import sys
 from git import Repo
 import mimetypes
 from tree_sitter_language_pack import get_parser
