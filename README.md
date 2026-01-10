@@ -63,3 +63,4 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
 3. A beautiful frontend.
 4. Expand to other languages. (only python codebase right now)
 5. ~~Need to add context window.~~
+6. Improve Latency

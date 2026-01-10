@@ -1,96 +1,102 @@
+# Pinecone Setup
 import os
 import time
 import logging
 from dotenv import load_dotenv
 from pinecone import Pinecone, ServerlessSpec
-from langsmith import utils
 from langchain_pinecone import PineconeVectorStore
-from uuid import uuid4
+from langsmith import utils
 from langchain_core.documents import Document
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from source.preprocessing import extract_spaces
 
-# Get Code Chunks
-spaces = extract_spaces(
-    language="python"
-)
-
-print(f"Extracted {len(spaces)} code chunks.")
-# Environment & Logging
 load_dotenv(".env")
-
-logging.basicConfig(level=logging.INFO)
 
 # Load API Keys
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
 LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
 
-# LangSmith Tracing Setup
+
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = LANGSMITH_API_KEY
-os.environ["LANGCHAIN_PROJECT"] = LANGSMITH_PROJECT
 
 utils.tracing_is_enabled()
 
-# Pinecone Setup
-INDEX_NAME = "code-embedding"
-pc = Pinecone(api_key=PINECONE_API_KEY)
+class CodeIngestionPipeline:
+    def __init__(
+        self,
+        index_name = "code-embedding",
+        pinecone_api_key = PINECONE_API_KEY,
+        embedding_model= None,
+    ):
+        
+        self.index_name = index_name
+        self.pc = Pinecone(api_key=pinecone_api_key)
+        self.embedding_model = embedding_model or CodeBERTEmbeddings()
+        self.index = None
 
-# Ensure Index Exists
-def ensure_index():
-    existing = [i["name"] for i in pc.list_indexes()]
-    if INDEX_NAME in existing:
-        logging.info(f"Index '{INDEX_NAME}' already exists.")
-        return
+    # Stage 1 
+    def extract(self, language: str, repo_url: str):
+        logging.info("Stage 1: Extracting code spaces...")
+        return extract_spaces(language=language, repo_url=repo_url)
 
-    logging.info(f"Creating index '{INDEX_NAME}'...")
-    pc.create_index(
-        name=INDEX_NAME,
-        dimension=EMBEDDING_DIM,
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region="us-east-1")
-    )
-    time.sleep(5)
-
-ensure_index()
-index = pc.Index(INDEX_NAME)
-
-# Embedding Model
-embedding_model = CodeBERTEmbeddings()
-
-# Vector Ingestion
-logging.info("Uploading documents to Pinecone...")
-
-documents = {}
-
-for path, elements in spaces.items():
-    document = []
-    for element in elements:
-            document.append(
-            Document(
-                page_content=element["code"],
-                metadata={
-                    "chunk_id": str(element["id"]),
-                    "type": str(element["metadata"]["type"]),
-                    "language": str(element["metadata"]["language"]),
-                    "file": str(element["metadata"]["file"]),
-                    "start_line": int(element["metadata"]["start_line"]),
-                    "end_line": int(element["metadata"]["end_line"]),
-                }
+    # Stage 2 
+    def ensure_index(self):
+        existing = [i["name"] for i in self.pc.list_indexes()]
+        if self.index_name not in existing:
+            logging.info(f"Creating index '{self.index_name}'...")
+            self.pc.create_index(
+                name=self.index_name,
+                dimension=EMBEDDING_DIM,
+                metric="cosine",
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
-        )
-    documents[path] = document
-    
+            time.sleep(5)
 
-# Create Vector Store and Add Documents
-for path, docs in documents.items():
-    vectorstore = PineconeVectorStore.from_documents(
-    documents=docs,
-    embedding=CodeBERTEmbeddings(),
-    index_name=INDEX_NAME,
-    namespace=path
-)
+        self.index = self.pc.Index(self.index_name)
 
+    # Stage 3 
+    def build_documents(self, spaces: dict):
+        logging.info("Stage 3: Building LangChain Documents...")
+        documents = {}
 
-logging.info("Ingestion complete.")
+        for path, elements in spaces.items():
+            docs = []
+            for element in elements:
+                docs.append(
+                    Document(
+                        page_content=element["code"],
+                        metadata={
+                            "chunk_id": str(element["id"]),
+                            "type": element["metadata"]["type"],
+                            "language": element["metadata"]["language"],
+                            "file": element["metadata"]["file"],
+                            "start_line": element["metadata"]["start_line"],
+                            "end_line": element["metadata"]["end_line"],
+                        }
+                    )
+                )
+            documents[path] = docs
+
+        return documents
+
+    # Stage 4 
+    def ingest(self, documents: dict):
+        logging.info("Stage 4: Uploading vectors to Pinecone...")
+
+        for namespace, docs in documents.items():
+            PineconeVectorStore.from_documents(
+                documents=docs,
+                embedding=self.embedding_model,
+                index_name=self.index_name,
+                namespace=namespace
+            )
+
+    # Orchestration
+    def run(self, language: str, repo_url: str):
+        spaces = self.extract(language, repo_url)
+        self.ensure_index()
+        documents = self.build_documents(spaces)
+        self.ingest(documents)
+
+        logging.info("Code ingestion pipeline completed.")

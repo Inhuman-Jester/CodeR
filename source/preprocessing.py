@@ -4,18 +4,15 @@ from git import Repo
 import mimetypes
 from tree_sitter_language_pack import get_parser
 import json
-
-# Ensure text is in UTF-8 bytes
-def to_utf8_bytes(text):
-    if isinstance(text, bytes):
-        return text
-    return text.encode("utf-8", errors="replace")
+import logging
+from utils.helper import to_utf8_bytes
 
 # Read file content from git repository
 def read_file(repo, path):
     try:
         return repo.git.show(f'HEAD:{path}')
-    except Exception:
+    except Exception as e:
+        logging.warning(f"Failed to read file {path}: {e}")
         return None
     
 def extract_called_function(call_node):
@@ -43,6 +40,8 @@ def walk(node, file, code, function_index, call_graph, file_struct, current_func
         name = node.child_by_field_name("name").text.decode("utf-8")
         fq_name = f"{file['path']}::{name}"
 
+        logging.debug(f"Discovered function: {fq_name}")
+
         function_index[name] = fq_name
         call_graph.setdefault(fq_name, set())
 
@@ -66,6 +65,8 @@ def walk(node, file, code, function_index, call_graph, file_struct, current_func
         name = node.child_by_field_name("name").text.decode("utf-8")
         fq_name = f"{file['path']}::{name}"
 
+        logging.debug(f"Discovered class: {fq_name}")
+
         space.append({
             "id": fq_name,
             "code": code[node.start_byte:node.end_byte].decode("utf-8", errors="ignore"),
@@ -83,6 +84,7 @@ def walk(node, file, code, function_index, call_graph, file_struct, current_func
     elif node.type == "call" and current_function:
         called = extract_called_function(node)
         if called:
+            logging.debug(f"Function call detected: {current_function} -> {called}")
             call_graph[current_function].add(called)
 
     # Recurse
@@ -103,10 +105,12 @@ def walk(node, file, code, function_index, call_graph, file_struct, current_func
 
 
 # Extract code chunks from repository habe to add an additional argumet for the repo link, to clone it locally and delete after use
-def extract_spaces(language: str = "python"):
+def extract_spaces(repo_url, language: str = "python"):
     local_path = "./public"
-    repo_url = "https://github.com/Inhuman-Jester/RAG-Project.git"
+
+    logging.info(f"Cloning repository from {repo_url} into {local_path}")
     Repo.clone_from(repo_url, local_path)
+
     repo = Repo(local_path)
 
     files = [
@@ -114,7 +118,8 @@ def extract_spaces(language: str = "python"):
         for item in repo.tree().traverse()
         if item.type == "blob"
     ]
-    print(f"Found {len(files)} files in the repository.")
+
+    logging.info(f"Discovered {len(files)} files in repository")
 
     code_files = []
 
@@ -132,7 +137,7 @@ def extract_spaces(language: str = "python"):
                 "file_type": file_type
             })
 
-        print(f"Read file: {f} (type: {file_type})")
+    logging.info(f"Filtered {len(code_files)} readable code files")
 
     parser = get_parser(language)
 
@@ -143,6 +148,8 @@ def extract_spaces(language: str = "python"):
 
     # Parse each file
     for f in code_files:
+        logging.debug(f"Parsing file: {f['path']}")
+
         code_bytes = to_utf8_bytes(f["content"])
         tree = parser.parse(code_bytes)
         root = tree.root_node
@@ -162,9 +169,10 @@ def extract_spaces(language: str = "python"):
         )
 
         dir_structure[f["path"]] = file_struct
-        print(f"Parsed file: {f['path']}")
         
     # Resolve Call Graph
+    logging.info("Resolving call graph")
+
     call_graph = {}
 
     for caller, callees in raw_call_graph.items():
@@ -176,10 +184,14 @@ def extract_spaces(language: str = "python"):
             else:
                 call_graph[caller].append(callee)  # unresolved / external
     
+    logging.info("Persisting call graph and directory structure")
+
     json.dump(call_graph, open('database/call_graph.json', 'w'), indent=2)
     json.dump(dir_structure, open('database/dir_structure.json', 'w'), indent=2)
     
     def delete_after_exit(path):
+        logging.info(f"Scheduling cleanup for directory: {path}")
+
         subprocess.Popen(
             [
                 "cmd", "/c",
@@ -189,9 +201,9 @@ def extract_spaces(language: str = "python"):
         )
 
     delete_after_exit("public")
-    print(spaces)
+    logging.info("Code extraction completed successfully")
+
     return spaces
 
 if __name__ == "__main__":
     spaces = extract_spaces(language="python")
-    print(f"Extracted {len(spaces)} code chunks from the repository.")

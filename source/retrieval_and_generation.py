@@ -192,9 +192,9 @@ graph.add_edge("invalid", "update_chat_history")
 graph.add_edge("update_chat_history", END)
 
 
-app = graph.compile()
+rag_chain = graph.compile()
 
-result = app.invoke({
+result = rag_chain.invoke({
     "query": "Can you explain in more detail?"
 })
 
