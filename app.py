@@ -85,4 +85,4 @@ if user_query:
             st.markdown(answer["response"])
 
     # Save assistant message
-    st.session_state.chat_history.append(("assistant", answer))
+    st.session_state.chat_history.append(("assistant", answer["response"]))

@@ -60,7 +60,19 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
 
 1. An AI based debugger integrated
 2. Code search & Discovery (help developers find relevant code quickly)
-3. A beautiful frontend.
+3. ~~A beautiful frontend.~~
 4. Expand to other languages. (only python codebase right now)
 5. ~~Need to add context window.~~
 6. Improve Latency
+
+## On your device
+
+1. Clone the file to your system
+2. Set up the following env variables in your .env file:
+   - PINECONE_API_KEY = "key from pinecone "
+   - LANGSMITH_API_KEY = "from Langchain"
+   - LANGSMITH_PROJECT = "CodeR"
+   - LANGSMITH_TRACING_V2 = "true"
+   - GEMINI_API_KEY = "From aistudio.google.com"
+3. Setup a virtualenvironment and install all requirements
+4. in terminal, run this command : `streamlit run app.py`
