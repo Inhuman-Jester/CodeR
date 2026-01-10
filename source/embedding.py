@@ -100,3 +100,8 @@ class CodeIngestionPipeline:
         self.ingest(documents)
 
         logging.info("Code ingestion pipeline completed.")
+
+    def delete_index(self):
+        existing_indexes = [i["name"] for i in self.pc.list_indexes()]
+        if self.index_name in existing_indexes:
+            self.pc.delete_index(self.index_name)

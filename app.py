@@ -51,6 +51,23 @@ with st.sidebar:
                 except Exception as e:
                     st.error(f"Failed to parse repo: {e}")
 
+    st.divider()
+
+    if st.button("🛑 End Session", type="primary"):
+        with st.spinner("Cleaning up session..."):
+            try:
+                code_ingestion_pipeline.delete_index()
+            except Exception as e:
+                st.error(f"Failed to delete Pinecone index: {e}")
+
+            # Clear Streamlit session
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+
+            st.success("Session ended. Index deleted.")
+            st.rerun()
+
+
 # ---- MAIN CHAT UI ----
 if not st.session_state.repo_indexed:
     st.info("👈 Enter a GitHub repo and click **Parse & Index Repository** to begin.")
