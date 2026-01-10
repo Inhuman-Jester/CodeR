@@ -48,6 +48,7 @@ class CodeAgentState(TypedDict):
     file_path: Optional[str]
     snippets: Optional[List[dict]]
     response: Optional[str]
+    summary: Optional[str]
     chat_history_context: Optional[str]
 
 
@@ -74,18 +75,18 @@ def retrieve_chat_history(state: CodeAgentState):
 
 
 def classify_query(state: CodeAgentState):
-    query_classification_prompt = query_classification_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
+    # query_classification_prompt = query_classification_prompt_generator(dir_structure, state.get("chat_history_context",""))
     
-    messages = [
-        ("system", query_classification_prompt),
-        ("human", state["query"]),
-    ]
-    response = model.invoke(messages)
-    result = json.loads(response.content)
+    # messages = [
+    #     ("system", query_classification_prompt),
+    #     ("human", state["query"]),
+    # ]
+    # response = model.invoke(messages)
+    # result = json.loads(response.content)
 
     return {
-        "query_type": result["query_type"],
-        "file_path": result.get("file_path")
+        "query_type": "structural",
+        "file_path": None
     }
 
 
@@ -115,7 +116,8 @@ def semantic_reasoning(state: CodeAgentState):
     ]
 
     response = model.invoke(messages)
-    return {"response": response.content}
+    result = json.loads(response.content)
+    return {"response": result["response"], "summary": result["summary"]}
     
 
 def structural_reasoning(state: CodeAgentState):
@@ -126,7 +128,8 @@ def structural_reasoning(state: CodeAgentState):
         ("human", state["query"]),
     ]
     response = model.invoke(messages)
-    return {"response": response.content}
+    result = json.loads(response.content)
+    return {"response": result["response"], "summary": result["summary"]}
 
 
 def invalid_handler(state: CodeAgentState):
@@ -135,7 +138,10 @@ def invalid_handler(state: CodeAgentState):
     }
 
 def update_chat_history(state: CodeAgentState):
-    qa_text = f"Q: {state['query']}\nA: {state['response']}"
+    if(state["query_type"] == "invalid"): # Do not store invalid queries
+        return {}
+    
+    qa_text = f"Q: {state['query']}\nA: {state['summary']}"
 
     embedding = embedding_model.embed_documents([qa_text])[0].tolist()
 
@@ -195,7 +201,7 @@ graph.add_edge("update_chat_history", END)
 rag_chain = graph.compile()
 
 result = rag_chain.invoke({
-    "query": "Can you explain in more detail?"
+    "query": "Can you explain the structure of code?"
 })
 
 print(result["response"])

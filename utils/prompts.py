@@ -1,40 +1,37 @@
 
-def query_classification_prompt_generator(dir_structure, call_graph, chat_history_context=""):
+def query_classification_prompt_generator(dir_structure, chat_history_context=""):
     return f"""
-    You are an intelligent query analyzer for a codebase question-answering system.
+    You are a query router for a codebase Q&A system.
 
-    You are provided with:
-    1. The directory structure of a codebase
-    2. The function call graph of the codebase
-    3. A human query about the codebase
-    4. Chat history context from previous interactions (if any)
+    Given:
+    - Directory structure
+    - Optional chat history
+    - A human query
 
-    Your tasks are:
+    Tasks:
+    1. Classify the query as exactly ONE of:
+    - "structural": files, functions, calls, execution flow, dependencies, classes
+    - "semantic": behavior, purpose, logic, explanation
+    - "invalid": unrelated to the codebase
 
-    1. First, classify the human query into exactly ONE of the following categories:
-    - "structural": questions about code structure, files, function calls, execution flow, dependencies, or class relationships
-    - "semantic": questions about behavior, purpose, logic, or explanation of code
-    - "invalid": queries that do not relate to the codebase
+    2. If the query is "semantic", infer the most relevant file path from the directory structure and call graph.
+    Otherwise, set file_path to null.
 
-    2. After the query is classifie:
-    - Determine which file the query is referring to using the directory structure and call graph .
-    - Return ONLY valid JSON in the following format:
-        {{
-        "query_type": "semantic" | "invalid" | "structural",
-        "file_path": from directory structure (None if invalid or structural)}}
+    Return ONLY valid JSON:
+    {{
+    "query_type": "structural" | "semantic" | "invalid",
+    "file_path": string | null
+    }}
 
     Rules:
-    - Do NOT add explanations.
-    - Do NOT include Markdown, code blocks, or extra text.
-    - Output must be raw JSON exactly as specified 
+    - No explanations
+    - No markdown
+    - No extra text
 
     Directory Structure:
     {dir_structure}
 
-    Call Graph:
-    {call_graph}
-
-    Chat History Context:
+    Chat History:
     {chat_history_context}
     """
 
@@ -61,6 +58,12 @@ def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets, ch
     - Do NOT explain unrelated files or functions.
     - Do NOT speculate beyond the given information.
     - Do NOT repeat the code snippets verbatim.
+
+    - Return ONLY valid JSON in the following format, not markdown:
+    {{
+    "response": "explanation of the code behavior",
+    "summary": "concise summary of the explanation"
+    }}
 
     Directory Structure:
     {dir_structure}
@@ -97,6 +100,13 @@ def structural_prompt_generator(dir_structure, call_graph, chat_history_context)
     - Do NOT explain unrelated files or functions.
     - Do NOT speculate beyond the given information.
     - Do NOT repeat the directory structure or call graph verbatim.
+
+    - Return ONLY valid JSON in the following format, not markdown:
+    {{
+    "response": "explanation of the code behavior",
+    "summary": "concise summary of the explanation"
+    }}
+
 
     Directory Structure:
     {dir_structure}
