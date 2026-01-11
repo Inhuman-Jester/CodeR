@@ -12,14 +12,15 @@ def query_classification_prompt_generator(dir_structure, chat_history_context=""
     1. Classify the query as exactly ONE of:
     - "structural": files, functions, calls, execution flow, dependencies, classes
     - "semantic": behavior, purpose, logic, explanation
+    - "code_search": looking for specific code snippets or implementations
     - "invalid": unrelated to the codebase
 
-    2. If the query is "semantic", infer the most relevant file path from the directory structure and call graph.
+    2. If the query is "semantic" or "code_search", infer the most relevant file path from the directory structure and call graph.
     Otherwise, set file_path to null.
 
     Return ONLY valid JSON:
     {{
-    "query_type": "structural" | "semantic" | "invalid",
+    "query_type": "structural" | "semantic" | "code_search" | "invalid",
     "file_path": string | null
     }}
 
@@ -113,6 +114,48 @@ def structural_prompt_generator(dir_structure, call_graph, chat_history_context)
 
     Call Graph:
     {call_graph}
+
+    Chat History Context:
+    {chat_history_context}
+    """
+
+def code_search_prompt_generator(dir_structure, call_graph, file_path, snippets, chat_history_context):
+    return f"""
+    You are a code search assistant.
+
+    The incoming query is looking for specific code snippets or implementations.
+
+    You are provided with :
+    1. The directory structure of the codebase
+    2. The function call graph of the codebase
+    3. A human query
+    4. Relevant code snippets from the specified file
+    5. Chat history context from previous interactions (if any)
+
+    Your task:
+    - Use the code snippets to find and return the specific implementations that address the query.
+    - Focus only on the components directly involved.
+
+    Rules:
+    - Be concise and precise.
+    - Do NOT explain unrelated files or functions.
+    - Do NOT speculate beyond the given information.
+    - Do NOT repeat the code snippets verbatim.
+
+    - Return ONLY valid JSON in the following format, not markdown:
+    {{
+    "response": "specific code implementations",
+    "summary": "concise summary of the implementations"
+    }}
+
+    Directory Structure:
+    {dir_structure}
+
+    Call Graph:
+    {call_graph}
+
+    Code Snippets from {file_path}:
+    {snippets}
 
     Chat History Context:
     {chat_history_context}

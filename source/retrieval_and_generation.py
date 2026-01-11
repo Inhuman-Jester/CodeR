@@ -5,7 +5,7 @@ import json
 from pinecone import Pinecone
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from typing import TypedDict, Optional, List
-from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator
+from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator, code_search_prompt_generator
 from langgraph.graph import StateGraph, END, START
 from utils.helper import formatContext
 
@@ -40,8 +40,6 @@ model = ChatGoogleGenerativeAI(
 dir_structure = open("database/dir_structure.json", "r").read()
 call_graph = open("database/call_graph.json", "r").read()
 
-query = "What is the flow of data processing in the codebase?"
-
 class CodeAgentState(TypedDict):
     query: str
     query_type: Optional[str]
@@ -75,14 +73,14 @@ def retrieve_chat_history(state: CodeAgentState):
 
 
 def classify_query(state: CodeAgentState):
-    # query_classification_prompt = query_classification_prompt_generator(dir_structure, state.get("chat_history_context",""))
+    query_classification_prompt = query_classification_prompt_generator(dir_structure, state.get("chat_history_context",""))
     
-    # messages = [
-    #     ("system", query_classification_prompt),
-    #     ("human", state["query"]),
-    # ]
-    # response = model.invoke(messages)
-    # result = json.loads(response.content)
+    messages = [
+        ("system", query_classification_prompt),
+        ("human", state["query"]),
+    ]
+    response = model.invoke(messages)
+    result = json.loads(response.content)
 
     return {
         "query_type": "structural",
@@ -90,7 +88,7 @@ def classify_query(state: CodeAgentState):
     }
 
 
-def semantic_retrieval(state: CodeAgentState):
+def semantic_code_search_retrieval(state: CodeAgentState):
     embedded_query = embedding_model.embed_documents(
         [state["query"]]
     )[0].tolist()
@@ -121,10 +119,22 @@ def semantic_reasoning(state: CodeAgentState):
     
 
 def structural_reasoning(state: CodeAgentState):
-    structural_prompt = structural_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
+    structural_prompt = structural_prompt_generator(dir_structure, call_graph, state["file_path"], state.get("chat_history_context",""))
 
     messages = [
         ("system", structural_prompt),
+        ("human", state["query"]),
+    ]
+    response = model.invoke(messages)
+    result = json.loads(response.content)
+    return {"response": result["response"], "summary": result["summary"]}
+
+
+def code_search_reasoning(state: CodeAgentState):
+    code_search_prompt = code_search_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"], state.get("chat_history_context",""))
+
+    messages = [
+        ("system", code_search_prompt),
         ("human", state["query"]),
     ]
     response = model.invoke(messages)
@@ -165,9 +175,10 @@ graph = StateGraph(CodeAgentState)
 
 graph.add_node("retrieve_chat_history", retrieve_chat_history)
 graph.add_node("classify", classify_query)
-graph.add_node("semantic_retrieval", semantic_retrieval)
+graph.add_node("semantic_code_search_retrieval", semantic_code_search_retrieval)
 graph.add_node("semantic_reasoning", semantic_reasoning)
 graph.add_node("structural_reasoning", structural_reasoning)
+graph.add_node("code_search_reasoning", code_search_reasoning)
 graph.add_node("invalid", invalid_handler)
 graph.add_node("update_chat_history", update_chat_history)
 
@@ -177,6 +188,8 @@ def route(state: CodeAgentState):
         return "semantic_retrieval"
     elif state["query_type"] == "structural":
         return "structural_reasoning"
+    elif state["query_type"] == "code_search":
+        return "code_search"
     else:
         return "invalid"
     
@@ -186,12 +199,20 @@ graph.add_conditional_edges(
     "classify",
     route,
     {
-        "semantic_retrieval": "semantic_retrieval",
+        "semantic_code_search_retrieval": "semantic_code_search_retrieval",
         "structural_reasoning": "structural_reasoning",
+        "code_search": "semantic_code_search_retrieval",
         "invalid": "invalid"
     }
 )
-graph.add_edge("semantic_retrieval", "semantic_reasoning")
+graph.add_edge(
+    "semantic_code_search_retrieval", 
+    route,
+    {
+    "semantic": "semantic_reasoning",
+    "code_search": "code_search_reasoning",
+    }
+)
 graph.add_edge("semantic_reasoning", "update_chat_history")
 graph.add_edge("structural_reasoning", "update_chat_history")
 graph.add_edge("invalid", "update_chat_history")
