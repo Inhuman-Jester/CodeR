@@ -1,8 +1,9 @@
 import os
+import time
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 import json
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from typing import TypedDict, Optional, List
 from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator, code_search_prompt_generator
@@ -20,9 +21,22 @@ index_name = "code-embedding"
 
 os.environ["LANGSMITH_TRACING"] = "true"
 
+def ensure_index():
+        existing = [i["name"] for i in pc.list_indexes()]
+        if index_name not in existing:
+            pc.create_index(
+                name=index_name,
+                dimension=EMBEDDING_DIM,
+                metric="cosine",
+                spec=ServerlessSpec(cloud="aws", region="us-east-1")
+            )
+            time.sleep(5)
+
+        return pc.Index(index_name)
+
 # Pinecone Setup
 pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index(index_name)
+index = ensure_index()
 
 # Embedding Model
 embedding_model = CodeBERTEmbeddings()
@@ -30,10 +44,8 @@ embedding_model = CodeBERTEmbeddings()
 # LLM Model Setup
 model = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
-    temperature=0.5,
-    max_tokens=None,
-    timeout=None,
-    max_retries=2
+    temperature=0,
+    max_tokens=None
 )
 
 # Load Directory Structure & Call Graph
@@ -83,8 +95,8 @@ def classify_query(state: CodeAgentState):
     result = json.loads(response.content)
 
     return {
-        "query_type": "structural",
-        "file_path": None
+        "query_type": result["query_type"],
+        "file_path": result.get("file_path","")
     }
 
 
@@ -119,7 +131,7 @@ def semantic_reasoning(state: CodeAgentState):
     
 
 def structural_reasoning(state: CodeAgentState):
-    structural_prompt = structural_prompt_generator(dir_structure, call_graph, state["file_path"], state.get("chat_history_context",""))
+    structural_prompt = structural_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
 
     messages = [
         ("system", structural_prompt),
@@ -185,9 +197,9 @@ graph.add_node("update_chat_history", update_chat_history)
 
 def route(state: CodeAgentState):
     if state["query_type"] == "semantic":
-        return "semantic_retrieval"
+        return "semantic"
     elif state["query_type"] == "structural":
-        return "structural_reasoning"
+        return "structural"
     elif state["query_type"] == "code_search":
         return "code_search"
     else:
@@ -199,13 +211,13 @@ graph.add_conditional_edges(
     "classify",
     route,
     {
-        "semantic_code_search_retrieval": "semantic_code_search_retrieval",
-        "structural_reasoning": "structural_reasoning",
+        "semantic": "semantic_code_search_retrieval",
+        "structural": "structural_reasoning",
         "code_search": "semantic_code_search_retrieval",
         "invalid": "invalid"
     }
 )
-graph.add_edge(
+graph.add_conditional_edges(
     "semantic_code_search_retrieval", 
     route,
     {
