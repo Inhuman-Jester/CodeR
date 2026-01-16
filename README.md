@@ -40,9 +40,10 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
 
     - Semantic queries
     - Structural queries
+    - Code Search queries
     - None / irrelevant
 
-    Also, it returns file\_\_path to which the query is relevant (only if it is semantic)
+    Also, it returns file\_\_path to which the query is relevant ( if it is semantic or code search)
 
     The query is routed to the appropriate pipeline.
 
@@ -53,13 +54,19 @@ CodeR aims to bridge this gap by treating a codebase not as plain text, but as a
     - Retrieved code chunks are passed to the LLM for explanation, summarization, or comparison along with Codebase Structure and Function call graph.
 
 6.  **_Structural Query Handling_** :
+
     - No embeddings involved.
     - Answers are derived from: AST, function call graph & file structure maps
+
+7.  **_Code Search_** :
+    - From the file path, get the namespace
+    - Vector search using meta data filtering to get the specific function/class asked for
+    - Response contains path to the file, the name of the node (function/class/etc), the starting and ending line.
 
 ## What more? (yet to implement)
 
 1. An AI based debugger integrated
-2. Code search & Discovery (help developers find relevant code quickly)
+2. ~~Code search & Discovery (help developers find relevant code quickly)~~
 3. ~~A beautiful frontend.~~
 4. Expand to other languages. (only python codebase right now)
 5. ~~Need to add context window.~~

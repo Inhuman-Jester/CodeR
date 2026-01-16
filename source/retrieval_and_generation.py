@@ -6,7 +6,7 @@ import json
 from pinecone import Pinecone, ServerlessSpec
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from typing import TypedDict, Optional, List
-from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator, code_search_prompt_generator
+from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator
 from langgraph.graph import StateGraph, END, START
 from utils.helper import formatContext
 
@@ -100,7 +100,7 @@ def classify_query(state: CodeAgentState):
     }
 
 
-def semantic_code_search_retrieval(state: CodeAgentState):
+def semantic_retrieval(state: CodeAgentState):
     embedded_query = embedding_model.embed_documents(
         [state["query"]]
     )[0].tolist()
@@ -143,15 +143,25 @@ def structural_reasoning(state: CodeAgentState):
 
 
 def code_search_reasoning(state: CodeAgentState):
-    code_search_prompt = code_search_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"], state.get("chat_history_context",""))
+    node_path = state["file_path"]
+    namespace = node_path.rsplit("::", 1)[0]
 
-    messages = [
-        ("system", code_search_prompt),
-        ("human", state["query"]),
-    ]
-    response = model.invoke(messages)
-    result = json.loads(response.content)
-    return {"response": result["response"], "summary": result["summary"]}
+    vector = [0.0] * EMBEDDING_DIM
+    results = index.query(
+        namespace=namespace,
+        vector=vector,
+        filter={
+            "chunk_id": {"$eq": node_path}
+        },
+        top_k=3,
+        include_metadata=True
+    )
+
+    code_location = [m["metadata"] for m in results["matches"]][0]
+
+    response = f"""The code is located in file: {code_location["file"]} in {code_location["type"]} : {code_location["chunk_id"].rsplit("::", 1)[-1]}, starting at line {code_location["start_line"]} to line {code_location["end_line"]}."""
+    summary = f"Code found in {code_location['chunk_id']} at lines {code_location['start_line']}-{code_location['end_line']}."
+    return {"response": response, "summary": summary}
 
 
 def invalid_handler(state: CodeAgentState):
@@ -187,7 +197,7 @@ graph = StateGraph(CodeAgentState)
 
 graph.add_node("retrieve_chat_history", retrieve_chat_history)
 graph.add_node("classify", classify_query)
-graph.add_node("semantic_code_search_retrieval", semantic_code_search_retrieval)
+graph.add_node("semantic_retrieval", semantic_retrieval)
 graph.add_node("semantic_reasoning", semantic_reasoning)
 graph.add_node("structural_reasoning", structural_reasoning)
 graph.add_node("code_search_reasoning", code_search_reasoning)
@@ -211,22 +221,16 @@ graph.add_conditional_edges(
     "classify",
     route,
     {
-        "semantic": "semantic_code_search_retrieval",
+        "semantic": "semantic_retrieval",
         "structural": "structural_reasoning",
-        "code_search": "semantic_code_search_retrieval",
+        "code_search": "code_search_reasoning",
         "invalid": "invalid"
     }
 )
-graph.add_conditional_edges(
-    "semantic_code_search_retrieval", 
-    route,
-    {
-    "semantic": "semantic_reasoning",
-    "code_search": "code_search_reasoning",
-    }
-)
+graph.add_edge("semantic_retrieval", "semantic_reasoning")
 graph.add_edge("semantic_reasoning", "update_chat_history")
 graph.add_edge("structural_reasoning", "update_chat_history")
+graph.add_edge("code_search_reasoning", "update_chat_history")
 graph.add_edge("invalid", "update_chat_history")
 graph.add_edge("update_chat_history", END)
 
