@@ -2,6 +2,7 @@ import streamlit as st
 import os
 from source.embedding import CodeIngestionPipeline        # parses + builds call graph + vectors
 from source.retrieval_and_generation import rag_chain      # answers queries
+from utils.helper import load_codebase_metadata
 
 
 code_ingestion_pipeline = CodeIngestionPipeline(
@@ -42,6 +43,7 @@ with st.sidebar:
             with st.spinner("Cloning and parsing repository..."):
                 try:
                     code_ingestion_pipeline.run(language="python", repo_url=repo_url)
+                    load_codebase_metadata()
                     st.session_state.repo_indexed = True
                     st.session_state.repo_url = repo_url
                     st.success("Repository indexed successfully!")

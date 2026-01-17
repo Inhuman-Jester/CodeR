@@ -54,8 +54,8 @@ model = ChatGoogleGenerativeAI(
 )
 
 # Load Directory Structure & Call Graph
-dir_structure = open("database/dir_structure.json", "r").read()
-call_graph = open("database/call_graph.json", "r").read()
+dir_structure = None
+call_graph = None
 
 class CodeAgentState(TypedDict):
     query: str
