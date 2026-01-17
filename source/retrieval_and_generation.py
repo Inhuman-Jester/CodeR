@@ -307,8 +307,8 @@ graph.add_edge("update_chat_history", END)
 
 rag_chain = graph.compile()
 
-result = rag_chain.invoke({
-    "query": "Can you explain the structure of code?"
-})
+# result = rag_chain.invoke({
+#     "query": "Can you explain the structure of code?"
+# })
 
-print(result["response"])
+# print(result["response"])
