@@ -22,6 +22,8 @@ index_name = "code-embedding"
 
 os.environ["LANGSMITH_TRACING"] = "true"
 
+print("Here")
+
 def ensure_index():
         existing = [i["name"] for i in pc.list_indexes()]
         if index_name not in existing:
@@ -57,6 +59,13 @@ model = ChatGoogleGenerativeAI(
 dir_structure = None
 call_graph = None
 
+if(os.path.exists("database/dir_structure.json") and os.path.exists("database/call_graph.json")):
+    with open("database/dir_structure.json", "r") as f:
+        dir_structure = json.load(f)
+
+    with open("database/call_graph.json", "r") as f:
+        call_graph = json.load(f)
+        
 class CodeAgentState(TypedDict):
     query: str
     query_type: Optional[str]
@@ -242,8 +251,8 @@ graph.add_edge("update_chat_history", END)
 
 rag_chain = graph.compile()
 
-# result = rag_chain.invoke({
-#     "query": "Can you explain the structure of code?"
-# })
+result = rag_chain.invoke({
+    "query": "Can you explain the structure of code?"
+})
 
-# print(result["response"])
+print(result["response"])

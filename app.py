@@ -43,7 +43,6 @@ with st.sidebar:
             with st.spinner("Cloning and parsing repository..."):
                 try:
                     code_ingestion_pipeline.run(language="python", repo_url=repo_url)
-                    load_codebase_metadata()
                     st.session_state.repo_indexed = True
                     st.session_state.repo_url = repo_url
                     st.success("Repository indexed successfully!")
