@@ -89,11 +89,25 @@ model = ChatGoogleGenerativeAI(
 dir_structure = None
 call_graph = None
 
-if(os.path.exists("database/dir_structure.json") and os.path.exists("database/call_graph.json")):
-    with open("database/dir_structure.json", "r") as f:
+
+def _ensure_metadata_loaded():
+    """Lazy-load dir_structure and call_graph after ingestion completes."""
+    global dir_structure, call_graph
+
+    if dir_structure is not None and call_graph is not None:
+        return
+
+    meta_path = "database"
+    dir_path = os.path.join(meta_path, "dir_structure.json")
+    call_path = os.path.join(meta_path, "call_graph.json")
+
+    if not (os.path.exists(dir_path) and os.path.exists(call_path)):
+        return
+
+    with open(dir_path, "r") as f:
         dir_structure = json.load(f)
 
-    with open("database/call_graph.json", "r") as f:
+    with open(call_path, "r") as f:
         call_graph = json.load(f)
 
 class CodeAgentState(TypedDict):
@@ -107,6 +121,8 @@ class CodeAgentState(TypedDict):
 
 
 def retrieve_chat_history(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     query = state["query"]
     embedded_query = embedding_model.embed_documents(
         [query]
@@ -129,6 +145,8 @@ def retrieve_chat_history(state: CodeAgentState):
 
 
 def classify_query(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     query_classification_prompt = query_classification_prompt_generator(dir_structure, state.get("chat_history_context",""))
     
     messages = [
@@ -145,6 +163,8 @@ def classify_query(state: CodeAgentState):
 
 
 def semantic_retrieval(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     embedded_query = embedding_model.embed_documents(
         [state["query"]]
     )[0]
@@ -162,6 +182,8 @@ def semantic_retrieval(state: CodeAgentState):
 
 
 def semantic_reasoning(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     semantic_prompt = semantic_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"], state.get("chat_history_context",""))
 
     messages = [
@@ -175,6 +197,8 @@ def semantic_reasoning(state: CodeAgentState):
     
 
 def structural_reasoning(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     structural_prompt = structural_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
 
     messages = [
@@ -187,6 +211,8 @@ def structural_reasoning(state: CodeAgentState):
 
 
 def code_search_reasoning(state: CodeAgentState):
+    _ensure_metadata_loaded()
+
     node_path = state["file_path"]
     namespace = node_path.rsplit("::", 1)[0]
 
