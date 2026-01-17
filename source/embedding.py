@@ -9,6 +9,7 @@ from langsmith import utils
 from langchain_core.documents import Document
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
 from source.preprocessing import extract_spaces
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 
 load_dotenv(".env")
 
@@ -32,7 +33,12 @@ class CodeIngestionPipeline:
         
         self.index_name = index_name
         self.pc = Pinecone(api_key=pinecone_api_key)
-        self.embedding_model = embedding_model or CodeBERTEmbeddings()
+        self.embedding_model = embedding_model or HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True}
+        )
+
         self.index = None
 
     # Stage 1 
@@ -47,7 +53,7 @@ class CodeIngestionPipeline:
             logging.info(f"Creating index '{self.index_name}'...")
             self.pc.create_index(
                 name=self.index_name,
-                dimension=EMBEDDING_DIM,
+                dimension=384,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )

@@ -5,6 +5,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import json
 from pinecone import Pinecone, ServerlessSpec
 from model.codeBERT import CodeBERTEmbeddings, EMBEDDING_DIM
+from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from typing import TypedDict, Optional, List
 from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator
 from langgraph.graph import StateGraph, END, START
@@ -26,7 +27,7 @@ def ensure_index():
         if index_name not in existing:
             pc.create_index(
                 name=index_name,
-                dimension=EMBEDDING_DIM,
+                dimension=384,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1")
             )
@@ -39,7 +40,11 @@ pc = Pinecone(api_key=PINECONE_API_KEY)
 index = ensure_index()
 
 # Embedding Model
-embedding_model = CodeBERTEmbeddings()
+embedding_model = HuggingFaceEmbeddings(
+    model_name="all-MiniLM-L6-v2",
+    model_kwargs={"device": "cpu"},
+    encode_kwargs={"normalize_embeddings": True}
+)
 
 # LLM Model Setup
 model = ChatGoogleGenerativeAI(
@@ -66,7 +71,7 @@ def retrieve_chat_history(state: CodeAgentState):
     query = state["query"]
     embedded_query = embedding_model.embed_documents(
         [query]
-    )[0].tolist()
+    )[0]
 
     chat_history_results = index.query(
         vector=embedded_query,
@@ -103,7 +108,7 @@ def classify_query(state: CodeAgentState):
 def semantic_retrieval(state: CodeAgentState):
     embedded_query = embedding_model.embed_documents(
         [state["query"]]
-    )[0].tolist()
+    )[0]
 
     results = index.query(
         namespace=state["file_path"],
@@ -146,7 +151,7 @@ def code_search_reasoning(state: CodeAgentState):
     node_path = state["file_path"]
     namespace = node_path.rsplit("::", 1)[0]
 
-    vector = [0.0] * EMBEDDING_DIM
+    vector = [0.0] * 384  # Dummy vector for code search reasoning
     results = index.query(
         namespace=namespace,
         vector=vector,
@@ -159,7 +164,7 @@ def code_search_reasoning(state: CodeAgentState):
 
     code_location = [m["metadata"] for m in results["matches"]][0]
 
-    response = f"""The code is located in file: {code_location["file"]} in {code_location["type"]} : {code_location["chunk_id"].rsplit("::", 1)[-1]}, starting at line {code_location["start_line"]} to line {code_location["end_line"]}."""
+    response = f"""The code is located in file: `{code_location["file"]}` in {code_location["type"]} : `{code_location["chunk_id"].rsplit("::", 1)[-1]}`, starting at line `{code_location["start_line"]}` to line `{code_location["end_line"]}`."""
     summary = f"Code found in {code_location['chunk_id']} at lines {code_location['start_line']}-{code_location['end_line']}."
     return {"response": response, "summary": summary}
 
@@ -175,7 +180,7 @@ def update_chat_history(state: CodeAgentState):
     
     qa_text = f"Q: {state['query']}\nA: {state['summary']}"
 
-    embedding = embedding_model.embed_documents([qa_text])[0].tolist()
+    embedding = embedding_model.embed_documents([qa_text])[0]
 
     index.upsert(
         vectors=[
@@ -237,8 +242,8 @@ graph.add_edge("update_chat_history", END)
 
 rag_chain = graph.compile()
 
-result = rag_chain.invoke({
-    "query": "Can you explain the structure of code?"
-})
+# result = rag_chain.invoke({
+#     "query": "Can you explain the structure of code?"
+# })
 
-print(result["response"])
+# print(result["response"])

@@ -1,8 +1,5 @@
 import streamlit as st
 import os
-
-# ---- IMPORT YOUR PIPELINES ----
-# Replace these with your actual implementations
 from source.embedding import CodeIngestionPipeline        # parses + builds call graph + vectors
 from source.retrieval_and_generation import rag_chain      # answers queries
 
@@ -97,7 +94,7 @@ if user_query:
                     "query": user_query
                 })
             except Exception as e:
-                answer = f"Error: {e}"
+                answer = {"response": f"Error: {e}"}
 
             st.markdown(answer["response"])
 
