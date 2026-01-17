@@ -1,5 +1,6 @@
 # Pinecone Setup
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import time
 import logging
 from dotenv import load_dotenv

@@ -1,4 +1,5 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import time
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -65,7 +66,7 @@ if(os.path.exists("database/dir_structure.json") and os.path.exists("database/ca
 
     with open("database/call_graph.json", "r") as f:
         call_graph = json.load(f)
-        
+
 class CodeAgentState(TypedDict):
     query: str
     query_type: Optional[str]
