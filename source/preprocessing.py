@@ -1,11 +1,26 @@
 import os
 import subprocess
+import time
 from git import Repo
 import mimetypes
 from tree_sitter_language_pack import get_parser
 import json
 import logging
 from utils.helper import to_utf8_bytes
+
+import shutil
+import os
+from git import Repo
+import tempfile
+
+def clone_repo(repo_url, local_path="./public"):
+    # Remove if exists
+    if os.path.exists(local_path):
+        shutil.rmtree(local_path)
+    
+    # Clone repo
+    Repo.clone_from(repo_url, local_path)
+    return local_path
 
 # Read file content from git repository
 def read_file(repo, path):
@@ -106,104 +121,79 @@ def walk(node, file, code, function_index, call_graph, file_struct, current_func
 
 # Extract code chunks from repository habe to add an additional argumet for the repo link, to clone it locally and delete after use
 def extract_spaces(repo_url, language: str = "python"):
-    local_path = "./public"
+    temp_dir = tempfile.mkdtemp()
+    repo = None
 
-    logging.info(f"Cloning repository from {repo_url} into {local_path}")
-    Repo.clone_from(repo_url, local_path)
+    try:
+        repo = Repo.clone_from(repo_url, temp_dir)
 
-    repo = Repo(local_path)
+        files = [
+            item.path
+            for item in repo.tree().traverse()
+            if item.type == "blob"
+        ]
 
-    files = [
-        item.path
-        for item in repo.tree().traverse()
-        if item.type == "blob"
-    ]
+        logging.info(f"Discovered {len(files)} files in repository")
 
-    logging.info(f"Discovered {len(files)} files in repository")
+        code_files = []
+        for f in files:
+            content = read_file(repo, f)
+            _, ext = os.path.splitext(f)
 
-    code_files = []
+            mime = mimetypes.guess_type(f)[0]
+            file_type = mime.split("/")[-1] if mime else ext[1:]
 
-    for f in files:
-        content = read_file(repo, f)
-        _, ext = os.path.splitext(f)
+            if content:
+                code_files.append({
+                    "path": f,
+                    "content": content,
+                    "file_type": file_type
+                })
 
-        mime = mimetypes.guess_type(f)[0]
-        file_type = mime.split("/")[-1] if mime else ext[1:]
+        parser = get_parser(language)
 
-        if content:
-            code_files.append({
-                "path": f,
-                "content": content,
-                "file_type": file_type
-            })
+        spaces = {}
+        function_index = {}
+        raw_call_graph = {}
+        dir_structure = {}
 
-    logging.info(f"Filtered {len(code_files)} readable code files")
+        for f in code_files:
+            code_bytes = to_utf8_bytes(f["content"])
+            tree = parser.parse(code_bytes)
+            root = tree.root_node
 
-    parser = get_parser(language)
+            file_struct = {"functions": [], "classes": []}
 
-    spaces = {}
-    function_index = {}
-    raw_call_graph = {}
-    dir_structure = {}
+            spaces[f["path"]] = walk(
+                root,
+                f,
+                code_bytes,
+                function_index,
+                raw_call_graph,
+                file_struct
+            )
 
-    # Parse each file
-    for f in code_files:
-        logging.debug(f"Parsing file: {f['path']}")
+            dir_structure[f["path"]] = file_struct
 
-        code_bytes = to_utf8_bytes(f["content"])
-        tree = parser.parse(code_bytes)
-        root = tree.root_node
-        
-        file_struct = {
-            "functions": [],
-            "classes": []
-        }
+        call_graph = {}
+        for caller, callees in raw_call_graph.items():
+            call_graph[caller] = [
+                function_index.get(callee, callee)
+                for callee in callees
+            ]
 
-        spaces[f["path"]] = walk(
-            root,
-            f,
-            code_bytes,
-            function_index,
-            raw_call_graph,
-            file_struct
-        )
+        os.makedirs("database", exist_ok=True)
+        with open("database/call_graph.json", "w") as f:
+            json.dump(call_graph, f, indent=2)
 
-        dir_structure[f["path"]] = file_struct
-        
-    # Resolve Call Graph
-    logging.info("Resolving call graph")
+        with open("database/dir_structure.json", "w") as f:
+            json.dump(dir_structure, f, indent=2)
 
-    call_graph = {}
+        return spaces
 
-    for caller, callees in raw_call_graph.items():
-        call_graph[caller] = list()
+    finally:
+        if repo is not None:
+            repo.close()
 
-        for callee in callees:
-            if callee in function_index:
-                call_graph[caller].append(function_index[callee])
-            else:
-                call_graph[caller].append(callee)  # unresolved / external
-    
-    logging.info("Persisting call graph and directory structure")
-
-    json.dump(call_graph, open('database/call_graph.json', 'w'), indent=2)
-    json.dump(dir_structure, open('database/dir_structure.json', 'w'), indent=2)
-    
-    def delete_after_exit(path):
-        logging.info(f"Scheduling cleanup for directory: {path}")
-
-        subprocess.Popen(
-            [
-                "cmd", "/c",
-                f"timeout /t 1 >nul && rmdir /s /q {path} && mkdir {path}"
-            ],
-            creationflags=subprocess.CREATE_NO_WINDOW
-        )
-
-    delete_after_exit("public")
-    logging.info("Code extraction completed successfully")
-
-    return spaces
-
-if __name__ == "__main__":
-    spaces = extract_spaces(language="python")
+        time.sleep(0.2) 
+        shutil.rmtree(temp_dir, ignore_errors=True)
