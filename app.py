@@ -1,6 +1,6 @@
 import streamlit as st
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 os.environ["TORCH_DEVICE"] = "cpu"
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 from source.embedding import CodeIngestionPipeline        # parses + builds call graph + vectors

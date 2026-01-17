@@ -1,5 +1,6 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# Force CPU-only execution to avoid torch trying to initialize unavailable accelerators on cloud hosts.
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import time
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -42,12 +43,40 @@ def ensure_index():
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index = ensure_index()
 
+def _build_embedding_model():
+    """Instantiate embeddings with a CPU-only fallback for hosted environments.
+
+    Streamlit Cloud sometimes surfaces NotImplementedError from torch when it attempts
+    to place weights on a non-existent accelerator. We hard-pin the model to CPU and
+    retry once with stricter guards if the first attempt fails.
+    """
+
+    common_kwargs = {
+        "model_name": "all-MiniLM-L6-v2",
+        "model_kwargs": {"device": "cpu"},
+        "encode_kwargs": {"normalize_embeddings": True},
+    }
+
+    try:
+        return HuggingFaceEmbeddings(**common_kwargs)
+    except NotImplementedError:
+        # Tighten CPU forcing and retry.
+        os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+        try:
+            import torch
+
+            torch.set_default_device("cpu")
+        except Exception:
+            # Best-effort; if torch import fails we still retry the embeddings instantiation.
+            pass
+
+        return HuggingFaceEmbeddings(**common_kwargs)
+
+
 # Embedding Model
-embedding_model = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2",
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True}
-)
+embedding_model = _build_embedding_model()
 
 # LLM Model Setup
 model = ChatGoogleGenerativeAI(

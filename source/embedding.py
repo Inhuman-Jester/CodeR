@@ -1,6 +1,7 @@
 # Pinecone Setup
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# Force CPU-only to avoid torch attempting unsupported accelerators in hosted environments.
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 import time
 import logging
 from dotenv import load_dotenv
@@ -34,11 +35,29 @@ class CodeIngestionPipeline:
         
         self.index_name = index_name
         self.pc = Pinecone(api_key=pinecone_api_key)
-        self.embedding_model = embedding_model or HuggingFaceEmbeddings(
-            model_name="all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
-            encode_kwargs={"normalize_embeddings": True}
-        )
+        def _build_embedding_model():
+            common_kwargs = {
+                "model_name": "all-MiniLM-L6-v2",
+                "model_kwargs": {"device": "cpu"},
+                "encode_kwargs": {"normalize_embeddings": True},
+            }
+
+            try:
+                return HuggingFaceEmbeddings(**common_kwargs)
+            except NotImplementedError:
+                os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+                os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+                try:
+                    import torch
+
+                    torch.set_default_device("cpu")
+                except Exception:
+                    pass
+
+                return HuggingFaceEmbeddings(**common_kwargs)
+
+        self.embedding_model = embedding_model or _build_embedding_model()
 
         self.index = None
 
