@@ -1,7 +1,8 @@
 # utils/helper.py
-
-# Formatting the retrieved elements into a string context
 import os
+import json
+import re
+from typing import Any, Dict
 
 
 def formatContext(retrieved_elements):
@@ -24,3 +25,27 @@ def load_codebase_metadata():
 
     with open("database/call_graph.json", "r") as f:
         call_graph = f.read()
+
+def to_json_safe(text: str, default: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    if default is None:
+        default = {}
+
+    if not text:
+        return default
+
+    text = re.sub(r"```(?:json)?", "", text, flags=re.IGNORECASE).strip()
+    text = text.replace("```", "").strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group())
+        except json.JSONDecodeError:
+            pass
+
+    return default

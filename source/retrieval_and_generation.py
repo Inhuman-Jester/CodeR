@@ -12,6 +12,7 @@ from typing import TypedDict, Optional, List
 from utils.prompts import query_classification_prompt_generator, semantic_prompt_generator, structural_prompt_generator
 from langgraph.graph import StateGraph, END, START
 from utils.helper import formatContext
+from utils.helper import to_json_safe
 
 load_dotenv(dotenv_path=".env")
 
@@ -23,8 +24,6 @@ LANGSMITH_TRACING_V2 = os.getenv("LANGSMITH_TRACING_V2")
 index_name = "code-embedding"
 
 os.environ["LANGSMITH_TRACING"] = "true"
-
-print("Here")
 
 def ensure_index():
         existing = [i["name"] for i in pc.list_indexes()]
@@ -89,9 +88,7 @@ model = ChatGoogleGenerativeAI(
 dir_structure = None
 call_graph = None
 
-
 def _ensure_metadata_loaded():
-    """Lazy-load dir_structure and call_graph after ingestion completes."""
     global dir_structure, call_graph
 
     if dir_structure is not None and call_graph is not None:
@@ -154,7 +151,7 @@ def classify_query(state: CodeAgentState):
         ("human", state["query"]),
     ]
     response = model.invoke(messages)
-    result = json.loads(response.content)
+    result = to_json_safe(response.content, default={"query_type": "invalid"})
 
     return {
         "query_type": result["query_type"],
@@ -183,7 +180,6 @@ def semantic_retrieval(state: CodeAgentState):
 
 def semantic_reasoning(state: CodeAgentState):
     _ensure_metadata_loaded()
-
     semantic_prompt = semantic_prompt_generator(dir_structure, call_graph, state["file_path"], state["snippets"], state.get("chat_history_context",""))
 
     messages = [
@@ -192,13 +188,16 @@ def semantic_reasoning(state: CodeAgentState):
     ]
 
     response = model.invoke(messages)
-    result = json.loads(response.content)
-    return {"response": result["response"], "summary": result["summary"]}
+    result = to_json_safe(response.content)
+    
+    return {
+        "response": result.get("response", ""),
+        "summary": result.get("summary", "")
+    }
     
 
 def structural_reasoning(state: CodeAgentState):
     _ensure_metadata_loaded()
-
     structural_prompt = structural_prompt_generator(dir_structure, call_graph, state.get("chat_history_context",""))
 
     messages = [
@@ -206,13 +205,16 @@ def structural_reasoning(state: CodeAgentState):
         ("human", state["query"]),
     ]
     response = model.invoke(messages)
-    result = json.loads(response.content)
-    return {"response": result["response"], "summary": result["summary"]}
+    result = to_json_safe(response.content)
+    
+    return {
+        "response": result.get("response", ""),
+        "summary": result.get("summary", "")
+    }
 
 
 def code_search_reasoning(state: CodeAgentState):
     _ensure_metadata_loaded()
-
     node_path = state["file_path"]
     namespace = node_path.rsplit("::", 1)[0]
 
@@ -308,7 +310,7 @@ graph.add_edge("update_chat_history", END)
 rag_chain = graph.compile()
 
 # result = rag_chain.invoke({
-#     "query": "Can you explain the structure of code?"
+#     "query": "What does walk function do?"
 # })
 
 # print(result["response"])
