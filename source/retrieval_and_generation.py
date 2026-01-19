@@ -279,8 +279,8 @@ graph.add_edge("update_chat_history", END)
 
 rag_chain = graph.compile()
 
-result = rag_chain.invoke({
-    "query": "What does walk function do?"
-})
+# result = rag_chain.invoke({
+#     "query": "What does walk function do?"
+# })
 
-print(result["response"])
+# print(result["response"])
