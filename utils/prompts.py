@@ -59,8 +59,9 @@ def semantic_prompt_generator(dir_structure, call_graph, file_path, snippets, ch
     - Do NOT explain unrelated files or functions.
     - Do NOT speculate beyond the given information.
     - Do NOT repeat the code snippets verbatim.
+    - No markdown.
 
-    - Return ONLY valid JSON in the following format, not markdown:
+    - Return ONLY valid JSON:
     {{
     "response": "explanation of the code behavior",
     "summary": "concise summary of the explanation"
@@ -101,8 +102,9 @@ def structural_prompt_generator(dir_structure, call_graph, chat_history_context)
     - Do NOT explain unrelated files or functions.
     - Do NOT speculate beyond the given information.
     - Do NOT repeat the directory structure or call graph verbatim.
-
-    - Return ONLY valid JSON in the following format, not markdown:
+    - No markdown.
+    
+    - Return ONLY valid JSON::
     {{
     "response": "explanation of the code behavior",
     "summary": "concise summary of the explanation"
